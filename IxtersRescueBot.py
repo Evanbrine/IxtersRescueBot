@@ -17,6 +17,17 @@ def start(message):
 def help(message):
     bot.reply_to(message, "/kick - кикнуть пользователя")
 
+#ПасхалкО
+@bot.message_handler(commands=['xyu'])
+def help(message):
+    bot.reply_to(message, "оставь это для жопы рекламщиков")
+
+#Проверка на правильность введённой команды
+@bot.message_handler(func=lambda message: message.text.startswith('/'))
+def handle_other_commands(message):
+    if message.text != '/start':  # Проверяем, что это не /start
+        bot.reply_to(message, "ПИДОРЫ, я не знаю таких комманд, пиши /help, чтобы узнать.")
+
 #Обработка кика
 @bot.message_handler(commands=['kick'])
 def kick_user(message):
