@@ -22,12 +22,6 @@ def help(message):
 def help(message):
     bot.reply_to(message, "оставь это для жопы рекламщиков")
 
-#Проверка на правильность введённой команды
-@bot.message_handler(func=lambda message: message.text.startswith('/'))
-def handle_other_commands(message):
-    if message.text != '/start':  # Проверяем, что это не /start
-        bot.reply_to(message, "ПИДОРЫ, я не знаю таких комманд, пиши /help, чтобы узнать.")
-
 #Обработка кика
 @bot.message_handler(commands=['kick'])
 def kick_user(message):
@@ -43,8 +37,45 @@ def kick_user(message):
     else:
         bot.reply_to(message, "Эта команда должна быть использована в ответ на сообщение пользователя, которого вы хотите кикнуть.")
 
+@bot.message_handler(content_types=['new_chat_members'])
+def greet_new_members(message):
+    for new_member in message.new_chat_members:
+        # Отправляем сообщение в группу
+        bot.send_message(
+            message.chat.id,
+            f"Привет, {new_member.first_name}! Если ты не ПИДОРЫ, то прочти эти правила https://telegra.ph/ixtersrules-09-04."
+        )
+
+#Проверка на правильность введённой команды
+@bot.message_handler(func=lambda message: message.text.startswith('/'))
+def handle_other_commands(message):
+    if message.text != '/start':  # Проверяем, что это не /start
+        bot.reply_to(message, "ПИДОРЫ, я не знаю таких комманд, пиши /help, чтобы узнать.")
+
+@bot.message_handler(func=lambda message: True) 
+def echo_all(message): 
+    bot.reply_to(message, message.text)
+    
+    words = []
+# Открываем файл для чтения
+    with open("message%20ratios.txt", "r") as file:
+        for line in file:  # Читаем файл построчно
+            # Разделяем строку на слова и добавляем их в общий список
+            words.extend(line.split())
+            list_test_words = words.extend(line.split())
+            list_test_words = list_test_words[:-1]
+            #Пример: s = "Привет, мир!". s_new = s[:-1]
+            bot.reply_to(message, line.strip())
+
+# Выводим список слов
+#print(words)
+    
+
+
+
+
+
 
 #Передача сообщений боту из телеграма
 bot.polling(none_stop=True, interval=0)
-
 
