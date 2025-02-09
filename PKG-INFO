@@ -1,3 +1,46 @@
+Metadata-Version: 2.4
+Name: pyTelegramBotAPI
+Version: 4.26.0
+Summary: Python Telegram bot api.
+Project-URL: Homepage, https://github.com/eternnoir/pyTelegramBotAPI
+Project-URL: Documentation, https://pytba.readthedocs.org
+Project-URL: Repository, https://github.com/eternnoir/pyTelegramBotAPI
+Project-URL: Issues, https://github.com/eternnoir/pyTelegramBotAPI/issues
+Author-email: eternnoir <eternnoir@gmail.com>
+License: GPL2
+License-File: LICENSE
+Keywords: api,bot,telegram,tools
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Environment :: Console
+Classifier: License :: OSI Approved :: GNU General Public License v2 (GPLv2)
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.9
+Requires-Dist: requests
+Provides-Extra: aiohttp
+Requires-Dist: aiohttp; extra == 'aiohttp'
+Provides-Extra: coloredlogs
+Requires-Dist: coloredlogs; extra == 'coloredlogs'
+Provides-Extra: fastapi
+Requires-Dist: fastapi; extra == 'fastapi'
+Provides-Extra: json
+Requires-Dist: ujson; extra == 'json'
+Provides-Extra: pil
+Requires-Dist: pillow; extra == 'pil'
+Provides-Extra: psutil
+Requires-Dist: psutil; extra == 'psutil'
+Provides-Extra: redis
+Requires-Dist: redis>=3.4.1; extra == 'redis'
+Provides-Extra: uvicorn
+Requires-Dist: uvicorn; extra == 'uvicorn'
+Provides-Extra: watchdog
+Requires-Dist: watchdog; extra == 'watchdog'
+Description-Content-Type: text/markdown
+
 
 [![PyPi Package Version](https://img.shields.io/pypi/v/pyTelegramBotAPI.svg)](https://pypi.python.org/pypi/pyTelegramBotAPI)
 [![Supported Python versions](https://img.shields.io/pypi/pyversions/pyTelegramBotAPI.svg)](https://pypi.python.org/pypi/pyTelegramBotAPI)
