@@ -56,16 +56,17 @@ def handle_other_commands(message):
 def echo_all(message): 
     bot.reply_to(message, message.text)
     
-    words = []
+    #words = []
 # Открываем файл для чтения
     with open("message%20ratios.txt", "r") as file:
         for line in file:  # Читаем файл построчно
-            # Разделяем строку на слова и добавляем их в общий список
-            words.extend(line.split())
-            list_test_words = words.extend(line.split())
-            list_test_words = list_test_words[:-1]
-            #Пример: s = "Привет, мир!". s_new = s[:-1]
-            bot.reply_to(message, line.strip())
+            if len(line) > 2: 
+                stripped_line = line[:-3]  # Отрезаем последние два символа
+                if stripped_line in line: # Проверяем входит ли вторая строка в первую
+                    line_number = line.replace(stripped_line, '') # Заменяем вторую строку на пустоту
+                    bot.reply_to(message, line_number)
+                bot.reply_to(message, stripped_line)
+                time.sleep(4)
 
 # Выводим список слов
 #print(words)
