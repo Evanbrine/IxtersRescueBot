@@ -20,10 +20,9 @@ def log_chat_message(message):
     user_info = f"Пользователь {message.from_user.username} (ID: {message.from_user.id})"
     chat_logger.info(f"{user_info} отправил сообщение: {message.text}")
 
-# Регистрация обработчиков команд
 @bot.message_handler(commands=['start'])
 def handle_start(message):
-    start(message, bot)  # Вызов обработчика из handlers.py
+    start(message, bot)
 
 @bot.message_handler(commands=['help'])
 def handle_help(message):
