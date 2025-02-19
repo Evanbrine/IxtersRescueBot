@@ -11,17 +11,6 @@ bot = telebot.TeleBot(TOKEN)
 # Инициализация логгеров
 command_logger, chat_logger = setup_loggers()
 
-# Функция для логирования действий пользователя
-def log_user_action(message, action):
-    user_info = f"Пользователь {message.from_user.username} (ID: {message.from_user.id})"
-    command_logger.info(f"{user_info} {action}")
-
-# Функция для логирования сообщений чата
-def log_chat_message(message):
-    user_info = f"Пользователь {message.from_user.username} (ID: {message.from_user.id})"
-    chat_logger.info(f"{user_info} отправил сообщение: {message.text}")
-
-# Регистрация обработчиков команд
 # Регистрация обработчиков команд
 @bot.message_handler(commands=['start'])
 def handle_start(message):

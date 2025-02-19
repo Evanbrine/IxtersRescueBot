@@ -1,8 +1,20 @@
 from functools import wraps
 from logger_setup import setup_loggers
+from telebot import types
+from pymorphy3 import MorphAnalyzer
+from telebot.types import ReplyKeyboardMarkup
+import threading
 
 # Инициализация логгеров
 command_logger, chat_logger = setup_loggers()
+
+# Словарь для хранения данных о пользователях
+user_data = {}
+
+# Глобальная переменная для хранения статистики
+stats = {}
+
+morph = MorphAnalyzer()
 
 # Функция для логирования действий пользователя
 def log_user_action(message, action):
@@ -11,14 +23,12 @@ def log_user_action(message, action):
 
 # Обработка команды /start
 def start(message, bot):
-    bot.reply_to(message, "Привет! Я пришёл спасти икстеров от ПИДОРЫ. Напиши /help, чтобы узнать, что я умею.")
+    bot.reply_to(message, "Привет! Я пришёл спасти икстеров. Напиши /help, чтобы узнать, что я умею.")
     log_user_action(message, "запустил команду /start")
 
 # Обработка команды /help
 def help(message, bot):
-    bot.reply_to(message, "/kick - кикнуть пользователя")
-    bot.reply_to(message, "/stats - общая статистика чата")
-    bot.reply_to(message, "/mystats - личная статистика")
+    bot.reply_to(message, "/kick - кикнуть пользователя\n/stats - общая статистика чата\n/mystats - личная статистика")
     log_user_action(message, "запустил команду /help")
 
 # Обработка команды /logs
@@ -29,6 +39,10 @@ def flush_logs(message, bot):
     for handler in chat_logger.handlers:
         handler.flush()
     bot.reply_to(message, "Логи записаны в файл.")
+
+# Приведение слов к изначальной форме
+def lemmatize_words(words):
+    return [morph.parse(word)[0].normal_form for word in words]
 
 # Обработка кика
 def kick_user(message, bot):
@@ -44,17 +58,20 @@ def kick_user(message, bot):
     else:
         bot.reply_to(message, "Эта команда должна быть использована в ответ на сообщение пользователя, которого вы хотите кикнуть.")
 
-# Приветственное сообщение при входе в чат нового пользователя
-def greet_new_members(message, bot):
-    for new_member in message.new_chat_members:
-        # Отправляем сообщение в группу
-        bot.send_message(
-            message.chat.id,
-            f"Привет, {new_member.first_name}! Если ты не ПИДОРЫ, то прочти эти правила https://telegra.ph/ixtersrules-09-04."
-        )
-
-# Глобальная переменная для хранения статистики
-stats = {}
+# Проверка, является ли пользователь администратором чата.
+def is_admin(bot, chat_id, user_id):
+    """
+    :param bot: Объект бота.
+    :param chat_id: ID чата.
+    :param user_id: ID пользователя.
+    :return: True, если пользователь администратор или создатель, иначе False.
+    """
+    try:
+        chat_member = bot.get_chat_member(chat_id, user_id)
+        return chat_member.status in ["administrator", "creator"]
+    except Exception as e:
+        print(f"Ошибка при проверке статуса пользователя: {e}")
+        return False
 
 # Обработчик команды /stats
 def chat_stats(message, bot):
@@ -92,11 +109,10 @@ def user_stats(message, bot):
         bot.reply_to(message, "Ваша статистика отсутствует.")
     log_user_action(message, "запустил команду /mystats")
 
-# Обработчик всех сообщений
+# Обработчик всех сообщений (обновляет статистику)
 def handle_message(message, bot):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    message_id = message.message_id  # ID сообщения для удаления
     
     # Если статистика для этого чата отсутствует, создаём её
     if chat_id not in stats:
@@ -120,3 +136,55 @@ def handle_message(message, bot):
     
     stats[chat_id]["users"][user_id]["message_count"] += 1
     stats[chat_id]["users"][user_id]["last_message"] = message.text
+
+# Функция для отправки сообщения с кнопкой "Вы бот?"
+def send_bot_check(chat_id, user_id, bot):
+    # Создаем клавиатуру с кнопками "Да" и "Нет"
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    markup.add("Да", "Нет")
+
+    # Отправляем сообщение с кнопками
+    bot.send_message(chat_id, "Вы бот?", reply_markup=markup)
+
+    # Запускаем таймер на 30 секунд
+    timer = threading.Timer(30.0, kick_user_if_no_response, args=[chat_id, user_id, bot])
+    user_data[user_id] = {"timer": timer, "chat_id": chat_id}
+    timer.start()
+
+# Функция для кика пользователя, если он не ответил
+def kick_user_if_no_response(chat_id, user_id, bot):
+    if user_id in user_data:
+        # Кикаем пользователя
+        bot.kick_chat_member(chat_id, user_id)
+        bot.send_message(chat_id, f"Пользователь {user_id} был кикнут за неактивность.")
+        del user_data[user_id]
+
+# Обработчик новых участников чата
+def greet_new_members(message, bot):
+    for user in message.new_chat_members:
+        # Отправляем проверочное сообщение
+        send_bot_check(message.chat.id, user.id, bot)
+
+# Обработчик ответов от пользователей
+def handle_response(message, bot):
+    user_id = message.from_user.id
+    if user_id in user_data:
+        # Останавливаем таймер
+        user_data[user_id]["timer"].cancel()
+
+        # Удаляем клавиатуру
+        bot.send_message(
+            user_data[user_id]["chat_id"],
+            "Спасибо за ответ!",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+
+        # Проверяем ответ
+        if message.text == "Нет":
+            bot.send_message(user_data[user_id]["chat_id"], "Добро пожаловать!")
+        else:
+            bot.kick_chat_member(user_data[user_id]["chat_id"], user_id)
+            bot.send_message(user_data[user_id]["chat_id"], f"Пользователь {user_id} был кикнут, так как признался, что он бот.")
+
+        # Удаляем данные пользователя
+        del user_data[user_id]
