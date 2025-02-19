@@ -11,6 +11,7 @@
     <OutputPath>.</OutputPath>
     <Name>IxtersRescueBot</Name>
     <RootNamespace>IxtersRescueBot</RootNamespace>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,8 +22,13 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="captcha_utils.py" />
     <Compile Include="IxtersRescueBot.py" />
     <Compile Include="logger_setup.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="forbidden_phrases.json" />
+    <Content Include="Users_White_List.json" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
