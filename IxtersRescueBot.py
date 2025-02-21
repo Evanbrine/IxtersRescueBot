@@ -2,9 +2,10 @@
 import telebot
 import time
 from logger_setup import setup_loggers
-from handlers import start, help, flush_logs, kick_user, greet_new_members, chat_stats, user_stats, handle_message, is_admin, morph, lemmatize_words, handle_response  # Импортируем обработчики
+from handlers import start, help, flush_logs, kick_user, chat_stats, user_stats, handle_message, is_admin, morph, lemmatize_words  # Импортируем обработчики
 from telebot import types
 from config import TOKEN
+import threading
 
 bot = telebot.TeleBot(TOKEN)
 
@@ -30,10 +31,6 @@ def handle_kick(message):
         return
     kick_user(message, bot)
 
-@bot.message_handler(content_types=['new_chat_members'])
-def handle_new_members(message):
-    greet_new_members(message, bot)
-
 @bot.message_handler(commands=['stats'])
 def handle_stats(message):
     chat_stats(message, bot)
@@ -42,10 +39,106 @@ def handle_stats(message):
 def handle_mystats(message):
     user_stats(message, bot)
 
-# Обработчик ответов "Да" и "Нет"
-@bot.message_handler(func=lambda message: message.text in ["Да", "Нет"])
-def handle_response_message(message):
-    handle_response(message, bot)
+new_user_data = {}
+
+# Функция для генерации уникального callback_data
+def generate_callback_data(user_id):
+    return f"verify_{user_id}"
+
+def get_user_name(user_id, chat_id):
+    try:
+        member = bot.get_chat_member(chat_id, user_id)
+
+        # Проверяем username
+        if member.user.username:
+            return f"@{member.user.username}"
+
+        # Если нет username, используем first_name и last_name
+        if member.user.first_name and member.user.last_name:
+            return f"{member.user.first_name} {member.user.last_name}".replace(" ", "_")  # Заменяем пробелы на подчеркивание для корректного форматирования
+
+        elif member.user.first_name:
+            return member.user.first_name.replace(" ", "_")
+
+        # Если нет имени, возвращаем цифровой идентификатор
+        return f"ID_{user_id}"
+
+    except Exception as e:
+        print(f"Ошибка при получении имени пользователя {user_id}: {e}")
+        return f"ID_{user_id}"
+
+# Функция для отправки сообщения с кнопкой
+def send_verification_message(chat_id, user_id):
+    # Создаем кнопку с уникальным callback_data
+    markup = types.InlineKeyboardMarkup()
+    button = types.InlineKeyboardButton("Я не бот!", callback_data=generate_callback_data(user_id))
+    markup.add(button)
+
+    # Получаем имя пользователя для формирования сообщения
+    user_name = get_user_name(user_id, chat_id)
+
+    # Отправляем сообщение в чат
+    msg = bot.send_message(
+        chat_id,
+        f"👋 <a href='tg://user?id={user_id}'>{user_name}</a>, подтвердите, что вы не бот! У вас 30 секунд",
+        parse_mode="HTML",
+        reply_markup=markup,
+        disable_notification=True
+    )
+
+    # Сохраняем данные о пользователе
+    new_user_data[user_id] = {
+        "chat_id": chat_id,
+        "message_id": msg.message_id,
+        "timer": None,
+        "msg_object": msg  # Добавляем объект сообщения для удаления
+    }
+
+    # Запускаем таймер на 30 секунд
+    timer = threading.Timer(30.0, kick_user_if_no_response, args=[chat_id, user_id])
+    new_user_data[user_id]["timer"] = timer
+    timer.start()
+
+# Функция для кика пользователя, если он не ответил
+def kick_user_if_no_response(chat_id, user_id):
+    if user_id in new_user_data:
+        # Кикаем пользователя
+        bot.kick_chat_member(chat_id, user_id)
+        bot.send_message(chat_id, f"Пользователь {get_user_name(user_id, chat_id)} был кикнут за неактивность.")
+        
+        # Удаляем сообщение с кнопкой "Я не бот!"
+        msg = new_user_data[user_id]["msg_object"]
+        bot.delete_message(msg.chat.id, msg.message_id)
+
+        # Удаляем данные пользователя
+        del new_user_data[user_id]
+
+# Обработчик новых участников чата
+@bot.message_handler(content_types=['new_chat_members'])
+def handle_new_members(message):
+    for new_user in message.new_chat_members:
+        # Отправляем сообщение с кнопкой
+        send_verification_message(message.chat.id, new_user.id)
+
+# Обработчик нажатия на кнопку
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    user_id = int(call.data.split('_')[1])
+    if user_id == call.from_user.id:
+        # Получаем корректное имя пользователя
+        user_name = get_user_name(user_id, call.message.chat.id)
+
+        # Отправляем подтверждение и удаляем кнопку
+        bot.send_message(call.message.chat.id, f"Привет, {user_name}! Вы успешно подтвердили, что вы не бот.")
+        bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.message_id)
+
+        # Останавливаем таймер
+        if user_id in new_user_data:
+            new_user_data[user_id]['timer'].cancel()
+            del new_user_data[user_id]
+
+    # Отвечаем на callback (чтобы убрать "часики" на кнопке)
+    bot.answer_callback_query(call.id)
 
 # Функция для логирования действий пользователя
 def log_user_action(message, action):
@@ -124,13 +217,14 @@ def handle_all_messages(message):
     if average_risk >= 2.5:  # Порог риска
         print(f"Сообщение от {message.from_user.username} превысило порог риска.")  # Отладка
         try:
-            # Удаляем сообщение
+            # Сначала кикаем пользователя
+            kick_user(message, bot)
+
+            # Затем удаляем сообщение
             bot.delete_message(message.chat.id, message.message_id)
             bot.send_message(chat_id=message.chat.id, text=f"Сообщение удалено за подозрение на рекламу.")
+
             print(f"Сообщение {message.message_id} удалено.")  # Отладка
-            
-            # Кикаем пользователя с помощью функции kick_user
-            #kick_user(message, bot)
         except Exception as e:
             print(f"Ошибка: {e}")  # Отладка
     else:
