@@ -56,16 +56,24 @@
 		"multiplier": 99
 	},
 	{
+		"words": [ "взаимный", "работа" ],
+		"multiplier": 99
+	},
+	{
+		"words": [ "зп", "от" ],
+		"multiplier": 99
+	},
+	{
 		"words": [ "в", "лс" ],
-		"multiplier": 15
+		"multiplier": 10
 	},
 	{
 		"words": [ "личный", "сообщение" ],
-		"multiplier": 99
+		"multiplier": 10
 	},
 	{
 		"words": [ "в", "личный", "сообщение" ],
-		"multiplier": 99
+		"multiplier": 10
 	},
 	{
 		"words": [ "гибкий", "график" ],

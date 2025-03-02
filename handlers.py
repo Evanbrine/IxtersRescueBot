@@ -4,6 +4,9 @@ from telebot import types
 from pymorphy3 import MorphAnalyzer
 from telebot.types import ReplyKeyboardMarkup
 import threading
+import sys
+import subprocess
+import os
 
 # Инициализация логгеров
 command_logger, chat_logger = setup_loggers()
@@ -40,14 +43,41 @@ def flush_logs(message, bot):
         handler.flush()
     bot.reply_to(message, "Логи записаны в файл.")
 
+# Функция для остановки бота
+def stop_bot(bot):
+    bot.stop_polling()
+    print("Бот остановлен.")
+
+# Функция для перезапуска бота
+def restart_bot():
+    print("Перезапуск бота...")
+    # Запуск нового процесса бота
+    subprocess.Popen([sys.executable, "IxtersRescueBot.py"])
+    # Завершение текущего процесса
+    os._exit(0)
+
+# Обработчик команды /restart
+def handle_restart(message, bot=None):
+    if bot is None:
+        raise ValueError("Бот не передан в функцию handle_restart")
+
+    # Останавливаем бота
+    stop_bot(bot)
+
+    # Перезапускаем бота
+    restart_bot()
+
+    # Отправка сообщения пользователю
+    bot.reply_to(message, "Бот перезапущен")
+
 # Приведение слов к изначальной форме
 def lemmatize_words(words):
     return [morph.parse(word)[0].normal_form for word in words]
 
-def kick_user(message, bot):
+def kick_user(message, bot, get_user_name):
     # Если сообщение является ответом на другое сообщение
     if message.reply_to_message:
-        user_id = message.reply_to_message.from_user.id
+        user_id = message.from_user.id
         chat_id = message.chat.id
     else:
         # Если сообщение не является ответом, используем отправителя текущего сообщения
@@ -57,15 +87,29 @@ def kick_user(message, bot):
     # Проверяем, является ли пользователь администратором
     user_status = bot.get_chat_member(chat_id, user_id).status
     if user_status in ['administrator', 'creator']:
-        bot.reply_to(message, "Невозможно кикнуть администратора.")
+        #bot.reply_to(message, "Невозможно кикнуть администратора.")
         return
 
     # Кикаем пользователя
     try:
         bot.kick_chat_member(chat_id, user_id)
-        bot.reply_to(message, f"Пользователь {user_id} был кикнут за подозрение в спаме")
+        bot.reply_to(message, f"Пользователь {get_user_name(user_id, chat_id)} был кикнут за подозрение в спаме", disable_notification=True, parse_mode="HTML")
     except Exception as e:
         bot.reply_to(message, f"Ошибка: {e}")
+
+def delete_message_after_delay(chat_id, message_id, bot, delay=10):
+    def delete_message():
+        try:
+            print(f"Попытка удалить сообщение {message_id} в чате {chat_id}.")
+            bot.delete_message(chat_id, message_id)
+            print(f"Сообщение {message_id} удалено.")
+        except Exception as e:
+            print(f"Ошибка при удалении сообщения {message_id}: {e}")
+
+    # Запускаем таймер
+    print(f"Таймер запущен для сообщения {message_id}.")
+    timer = threading.Timer(delay, delete_message)
+    timer.start()
 
 # Проверка, является ли пользователь администратором чата.
 def is_admin(bot, chat_id, user_id):
@@ -145,3 +189,7 @@ def handle_message(message, bot):
     
     stats[chat_id]["users"][user_id]["message_count"] += 1
     stats[chat_id]["users"][user_id]["last_message"] = message.text
+
+
+
+    
