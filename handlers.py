@@ -61,14 +61,15 @@ def handle_restart(message, bot=None):
     if bot is None:
         raise ValueError("Бот не передан в функцию handle_restart")
 
+    # Даем время боту завершить текущие операции
+    import time
+    time.sleep(1)
+
     # Останавливаем бота
     stop_bot(bot)
 
     # Перезапускаем бота
     restart_bot()
-
-    # Отправка сообщения пользователю
-    bot.reply_to(message, "Бот перезапущен")
 
 # Приведение слов к изначальной форме
 def lemmatize_words(words):
@@ -111,21 +112,6 @@ def delete_message_after_delay(chat_id, message_id, bot, delay=10):
     timer = threading.Timer(delay, delete_message)
     timer.start()
 
-# Проверка, является ли пользователь администратором чата.
-def is_admin(bot, chat_id, user_id):
-    """
-    :param bot: Объект бота.
-    :param chat_id: ID чата.
-    :param user_id: ID пользователя.
-    :return: True, если пользователь администратор или создатель, иначе False.
-    """
-    try:
-        chat_member = bot.get_chat_member(chat_id, user_id)
-        return chat_member.status in ["administrator", "creator"]
-    except Exception as e:
-        print(f"Ошибка при проверке статуса пользователя: {e}")
-        return False
-
 # Обработчик команды /stats
 def chat_stats(message, bot):
     chat_id = message.chat.id
@@ -138,14 +124,17 @@ def chat_stats(message, bot):
             "deleted_messages_count": 0,  # Счётчик удалённых сообщений
             "users": {}  # Словарь для статистики пользователей
         }
-        bot.reply_to(message, "Статистика чата инициализирована.")
+        msg = bot.reply_to(message, "Статистика чата инициализирована.")
     else:
         # Если статистика есть, выводим её
-        bot.reply_to(message, f"Статистика чата:\n"
+        msg = bot.reply_to(message, f"Статистика чата:\n"
                               f"Сообщений: {stats[chat_id]['message_count']}\n"
                               f"Пользователей: {stats[chat_id]['user_count']}\n"
                               f"Удалённых сообщений: {stats[chat_id]['deleted_messages_count']}")
         log_user_action(message, "запустил команду /stats")
+    
+    # Удаляем сообщение со статистикой через 20 секунд
+    delete_message_after_delay(chat_id, msg.message_id, bot, delay=20)
 
 # Обработчик команды /mystats (показывает статистику пользователя)
 def user_stats(message, bot):
@@ -155,12 +144,16 @@ def user_stats(message, bot):
     # Проверяем, есть ли статистика для этого чата и пользователя
     if chat_id in stats and user_id in stats[chat_id]["users"]:
         user_stat = stats[chat_id]["users"][user_id]
-        bot.reply_to(message, f"Ваша статистика:\n"
+        msg = bot.reply_to(message, f"Ваша статистика:\n"
                               f"Сообщений: {user_stat['message_count']}\n"
                               f"Последнее сообщение: {user_stat['last_message']}")
     else:
-        bot.reply_to(message, "Ваша статистика отсутствует.")
+        msg = bot.reply_to(message, "Ваша статистика отсутствует.")
+    
     log_user_action(message, "запустил команду /mystats")
+    
+    # Удаляем сообщение со статистикой через 20 секунд
+    delete_message_after_delay(chat_id, msg.message_id, bot, delay=20)
 
 # Обработчик всех сообщений (обновляет статистику)
 def handle_message(message, bot):
