@@ -187,16 +187,44 @@ try:
         print("Содержимое файла с запрещёнными словами:", forbidden_dict)  # Отладка
 except Exception as e:
     print(f"Ошибка при чтении файла с запрещёнными словами: {e}")
-    forbidden_dict = {}  # Если файл не удалось прочитать, используем пустой словарь
+    forbidden_dict = {}
 
 # Чтение файла с фразами
 try:
     with open('forbidden_phrases.json', 'r', encoding='utf-8') as file:
         forbidden_phrases = json.load(file)
-        print("Содержимое файла с фразами:", forbidden_phrases)  # Отладка
+        print("Содержимое файла с фразами:", forbidden_phrases)
 except Exception as e:
     print(f"Ошибка при чтении файла с фразами: {e}")
-    forbidden_phrases = []  # Если файл не удалось прочитать, используем пустой список
+    forbidden_phrases = []
+
+def save_forbidden_phrases():
+    try:
+        with open('forbidden_phrases.json', 'w', encoding='utf-8') as file:
+            json.dump(forbidden_phrases, file, ensure_ascii=False, indent=4)
+        print("Фразы успешно сохранены в файл.")
+    except Exception as e:
+        print(f"Ошибка при сохранении файла с фразами: {e}")
+
+def save_forbidden_dict():
+    try:
+        with open('forbidden_message.json', 'w', encoding='utf-8') as file:
+            json.dump(forbidden_dict, file, ensure_ascii=False, indent=4)
+        print("Словарь успешно сохранён в файл.")
+    except Exception as e:
+        print(f"Ошибка при сохранении словаря: {e}")
+
+last_matched_words = []
+last_matched_phrases = []
+last_message_chat_id = None
+last_message_id = None
+last_message_deleted = False
+last_message_text = ""
+last_all_words = []
+message_repeat_count = 0
+
+def calculate_risk_with_tracking(message):
+    global last_matched_words, last_matched_phrases, last_message_chat_id, last_message_id, last_message_deleted, last_message_text, message_repeat_count, last_all_words
 
 # Функция для расчёта риска
 def calculate_risk(message):
@@ -228,43 +256,88 @@ def calculate_risk(message):
 # Обработчик всех сообщений
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
-    global is_paused
+    global is_paused, last_message_deleted, deleted_messages_log
     if is_paused:
         return
     else:
-        print("Новое сообщение получено!")  # Отладка
-        print("Текст сообщения:", message.text)  # Отладка
+        print("Новое сообщение получено!")
+        print("Текст сообщения:", message.text)
     
         # Обновляем статистику через handle_message
         handle_message(message, bot)
     
         # Проверяем длину сообщения
         words = message.text.split()
-        if len(words) < 5:  # Если сообщение меньше 5 слов, игнорируем
-            print(f"Сообщение от {message.from_user.username} содержит меньше 5 слов. Пропускаем.")  # Отладка
+        if len(words) < 5:
+            print(f"Сообщение от {message.from_user.username} содержит меньше 5 слов. Пропускаем.")
+            #Проверка, есть ли сдохнуть в сообщении
+            check_death_word_and_respond(message)
             return
     
-        # Рассчитываем средний риск
-        average_risk = calculate_risk(message)
+        # Рассчитываем средний риск (включает проверку повторений)
+        average_risk = calculate_risk_with_tracking(message)
     
         # Проверяем, превышает ли риск порог
-        if average_risk >= 2.5:  # Порог риска
-            print(f"Сообщение от {message.from_user.username} превысило порог риска.")  # Отладка
+        if average_risk >= 2.5:
+            print(f"Сообщение от {message.from_user.username} превысило порог риска.")
             try:
-                # Сначала кикаем пользователя
-                #kick_user(message, bot, get_user_name)
+                # Сохраняем информацию об удаляемом сообщении
+                deleted_messages_log[message.message_id] = {
+                    "text": message.text,
+                    "user_id": message.from_user.id,
+                    "timestamp": datetime.now(),
+                    "words": last_all_words.copy()
+                }
 
-                # Затем удаляем сообщение
+                # Удаляем сообщение
                 bot.delete_message(message.chat.id, message.message_id)
-                msg = bot.send_message(chat_id=message.chat.id, text=f"Сообщение удалено за подозрение на рекламу.", disable_notification=True)
+                
+                # Отправляем сообщение с кнопкой жалобы
+                keyboard = create_complaint_keyboard(message.message_id)
+                msg = bot.send_message(
+                    chat_id=message.chat.id, 
+                    text=f"Сообщение удалено за подозрение на рекламу.\n"
+                         f"Если это ошибка, нажмите кнопку ниже:", 
+                    reply_markup=keyboard,
+                    disable_notification=True
+                )
 
-                # Удаляем сообщение через 20 секунд
-                delete_message_after_delay(message.chat.id, msg.message_id, bot, delay=10)
+                # Удаляем сообщение с кнопкой через 30 секунд
+                delete_message_after_delay(message.chat.id, msg.message_id, bot, delay=30)
+
+                print(f"Сообщение {message.message_id} удалено.")
+                last_message_deleted = True
+                message_repeat_count = 0
+
+                # Положительное обучение
+                if last_matched_words or last_matched_phrases:
+                    print("Автообучение: подтверждаем правильность удаления")
+                    manual_learn(positive_feedback=True, multiplier=0.5)
 
                 print(f"Сообщение {message.message_id} удалено.")  # Отладка
             except Exception as e:
-                print(f"Ошибка: {e}")  # Отладка
+                print(f"Ошибка при удалении: {e}")
+                last_message_deleted = False
         else:
-            print("Сообщение безопасно.")  # Отладка
+            print("Сообщение безопасно.")
+            last_message_deleted = False
+            #Проверка, есть ли сдохнуть в сообщении
+            check_death_word_and_respond(message)
+
+# Функция для очистки старых записей из лога (вызывать периодически)
+def cleanup_old_logs():
+    """Удаляет записи старше 1 часа из лога удаленных сообщений"""
+    global deleted_messages_log
+    current_time = datetime.now()
+    to_delete = []
+    
+    for msg_id, info in deleted_messages_log.items():
+        if current_time - info["timestamp"] > timedelta(hours=1):
+            to_delete.append(msg_id)
+    
+    for msg_id in to_delete:
+        del deleted_messages_log[msg_id]
+    
+    print(f"Очищено {len(to_delete)} старых записей из лога")
 
 bot.polling(none_stop=True, interval=0)
