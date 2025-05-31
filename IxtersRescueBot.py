@@ -3,23 +3,33 @@ import telebot
 import time
 from datetime import datetime, timedelta
 from logger_setup import setup_loggers
-from handlers import start, help, flush_logs, kick_user, chat_stats, user_stats, handle_message, morph, lemmatize_words, delete_message_after_delay, handle_restart  # Импортируем обработчики
+from handlers import start, help, flush_logs, kick_user, chat_stats, user_stats, handle_message, is_admin, morph, lemmatize_words, delete_message_after_delay, handle_restart  # Импортируем обработчики
 from telebot import types
 from config import TOKEN
 import threading
 
 bot = telebot.TeleBot(TOKEN)
 
+# Загружаем статистику при запуске
+load_stats()
+
+STATS_FILE = 'chat_statistics.json'
+
 # Инициализация логгеров
 command_logger, chat_logger = setup_loggers()
-
 
 #Разрешённые пользователи для использования админ-команд бота
 ALLOWED_USERS = [
     5113266064,   # Evanbrine
     5682932817,   # Мой второй акк 
     5143890821,   # Баунти
-    725840467     # Полина
+    725840467,    # Полина
+    6604377282,   # Тая
+    1274907358,   # Диззи
+    915228588,    # Симон
+    1249961804,   # Кто-то Тама
+    6378555926,   # Глюк
+    5111459895    # Мирчег  
 ]
 #Проверка на админа
 def is_admin(user_id):
@@ -31,9 +41,9 @@ def is_admin(user_id):
 def handle_start(message):
     start(message, bot)
 
-@bot.message_handler(commands=['help'])
-def handle_help(message):
-    help(message, bot)
+@bot.message_handler(commands=['mystats'])
+def handle_mystats(message):
+    user_stats(message, bot, get_user_name)
 
 @bot.message_handler(commands=['logs'])
 def handle_flush_logs(message):
@@ -383,248 +393,10 @@ def calculate_risk_with_tracking(message):
 
     return average_risk
 
-LEARNING_RATE = 0.1
-
-def auto_learn_aggressive(lemmatized_words, repeat_count):
-    """Агрессивное обучение для повторяющихся сообщений"""
-    global forbidden_dict
-    
-    base_increase = 1.0 * repeat_count
-    
-    for word in lemmatized_words:
-        if len(word) > 2:
-            old_value = forbidden_dict.get(word, 0)
-            new_value = old_value + base_increase
-            forbidden_dict[word] = new_value
-            print(f"Агрессивное обучение: '{word}' {old_value} -> {new_value}")
-    
-    save_forbidden_dict()
-
-def manual_learn(positive_feedback, multiplier=1):
-    """Ручное обучение - работает со всеми словами сообщения"""
-    global forbidden_dict, forbidden_phrases
-    
-    if positive_feedback:
-        base_adjustment = -LEARNING_RATE * multiplier
-        
-        for word in last_matched_words:
-            old_value = forbidden_dict.get(word, 0)
-            new_value = max(0, old_value + base_adjustment)
-            forbidden_dict[word] = new_value
-            print(f"Похвала: уменьшен коэффициент слова '{word}': {old_value} -> {new_value}")
-
-        for phrase in last_matched_phrases:
-            old_value = phrase["multiplier"]
-            new_value = max(0, old_value + base_adjustment)
-            phrase["multiplier"] = new_value
-            print(f"Похвала: уменьшен множитель фразы {phrase['words']}: {old_value} -> {new_value}")
-    
-    else:
-        base_adjustment = LEARNING_RATE * multiplier
-        
-        for word in last_all_words:
-            if len(word) > 2:
-                old_value = forbidden_dict.get(word, 0)
-                new_value = old_value + base_adjustment
-                forbidden_dict[word] = new_value
-                print(f"Ругань: увеличен коэффициент слова '{word}': {old_value} -> {new_value}")
-        
-        for phrase in last_matched_phrases:
-            old_value = phrase["multiplier"]
-            new_value = old_value + base_adjustment
-            phrase["multiplier"] = new_value
-            print(f"Ругань: увеличен множитель фразы {phrase['words']}: {old_value} -> {new_value}")
-
-    save_forbidden_dict()
-    save_forbidden_phrases()
-
-def handle_user_complaint(user_id, message_text, lemmatized_words):
-    """Обрабатывает жалобу пользователя на неправильное удаление"""
-    global forbidden_dict, forbidden_phrases, user_complaints
-    
-    # Записываем жалобу
-    if user_id not in user_complaints:
-        user_complaints[user_id] = []
-    user_complaints[user_id].append(datetime.now())
-    
-    # Уменьшаем коэффициенты слов из удаленного сообщения
-    reduction = 0.3  # Коэффициент уменьшения
-    
-    for word in lemmatized_words:
-        if word in forbidden_dict and forbidden_dict[word] > 0:
-            old_value = forbidden_dict[word]
-            new_value = max(0, old_value - reduction)
-            forbidden_dict[word] = new_value
-            print(f"Жалоба: уменьшен коэффициент слова '{word}': {old_value} -> {new_value}")
-    
-    # Проверяем фразы и уменьшаем их множители
-    for phrase in forbidden_phrases:
-        phrase_words = phrase["words"]
-        if all(word in lemmatized_words for word in phrase_words):
-            old_value = phrase["multiplier"]
-            new_value = max(0, old_value - reduction)
-            phrase["multiplier"] = new_value
-            print(f"Жалоба: уменьшен множитель фразы {phrase['words']}: {old_value} -> {new_value}")
-    
-    save_forbidden_dict()
-    save_forbidden_phrases()
-
-def create_complaint_keyboard(message_id):
-    """Создает inline клавиатуру для жалобы"""
-    from telebot import types
-    
-    keyboard = types.InlineKeyboardMarkup()
-    complaint_btn = types.InlineKeyboardButton(
-        "❌ Это ошибка!", 
-        callback_data=f"complaint_{message_id}"
-    )
-    correct_btn = types.InlineKeyboardButton(
-        "✅ Ты молодец", 
-        callback_data=f"correct_{message_id}"
-    )
-    keyboard.add(complaint_btn, correct_btn)
-    return keyboard
-
-def handle_correct_deletion(message_text, lemmatized_words):
-    """Обрабатывает подтверждение правильности удаления"""
-    global forbidden_dict, forbidden_phrases
-    
-    # Увеличиваем коэффициенты слов из правильно удаленного сообщения
-    increase = 0.2  # Коэффициент увеличения
-    
-    for word in lemmatized_words:
-        if len(word) > 2:  # Игнорируем короткие слова
-            old_value = forbidden_dict.get(word, 0)
-            new_value = old_value + increase
-            forbidden_dict[word] = new_value
-            print(f"Подтверждение: увеличен коэффициент слова '{word}': {old_value} -> {new_value}")
-    
-    # Проверяем фразы и увеличиваем их множители
-    for phrase in forbidden_phrases:
-        phrase_words = phrase["words"]
-        if all(word in lemmatized_words for word in phrase_words):
-            old_value = phrase["multiplier"]
-            new_value = old_value + increase
-            phrase["multiplier"] = new_value
-            print(f"Подтверждение: увеличен множитель фразы {phrase['words']}: {old_value} -> {new_value}")
-    
-    save_forbidden_dict()
-    save_forbidden_phrases()
-
-@bot.message_handler(commands=['praise', 'scold', 'scold_hard'])
-def feedback_handler(message):
-    global last_message_chat_id, last_message_id, last_all_words
-    
-    if last_message_chat_id != message.chat.id or last_message_id is None:
-        bot.reply_to(message, "Нет проанализированного сообщения для оценки.")
-        return
-    
-    if not last_all_words:
-        bot.reply_to(message, "Нет данных о последнем сообщении для обучения.")
-        return
-
-    if message.text.startswith('/praise'):
-        positive = True
-        multiplier = 1
-        action = "похвалы"
-    elif message.text.startswith('/scold'):
-        positive = False
-        multiplier = 1
-        action = "ругани"
-    elif message.text.startswith('/scold_hard'):
-        positive = False
-        multiplier = 3
-        action = "сильной ругани"
-    else:
-        bot.reply_to(message, "Неизвестная команда.")
-        return
-
-    print(f"Ручное обучение: {action} для сообщения с {len(last_all_words)} словами")
-    manual_learn(positive_feedback=positive, multiplier=multiplier)
-
-    if positive:
-        response = f"Спасибо за похвалу! Уменьшил коэффициенты найденных слов/фраз."
-    else:
-        response = f"Понял! Увеличил коэффициенты всех слов сообщения (множитель {multiplier}x)."
-    
-    bot.reply_to(message, response)
-
-@bot.message_handler(commands=['last'])
-def show_last_message(message):
-    if last_message_chat_id != message.chat.id or not last_all_words:
-        bot.reply_to(message, "Нет данных о последнем сообщении.")
-        return
-    
-    response = f"Последнее сообщение: '{last_message_text}'\n"
-    response += f"Слова: {', '.join(last_all_words)}\n"
-    response += f"Найденные запрещенные слова: {', '.join(last_matched_words) if last_matched_words else 'нет'}\n"
-    response += f"Найденные фразы: {len(last_matched_phrases)} шт."
-    
-    bot.reply_to(message, response)
-
-# Ручное удаление сообщений
-@bot.message_handler(commands=['delete'])
-def delete_message_command(message):
-    # Проверяем, является ли пользователь администратором
-    if not is_admin(message.from_user.id):
-        bot.reply_to(message, "У вас нет прав для удаления сообщений.")
-        return
-    
-    # Проверяем, является ли сообщение ответом на другое сообщение
-    if message.reply_to_message:
-        try:
-            # Удаляем сообщение, на которое ответили
-            bot.delete_message(message.chat.id, message.reply_to_message.message_id)
-            
-            # Удаляем саму команду /delete
-            bot.delete_message(message.chat.id, message.message_id)
-            
-            print(f"Сообщение {message.reply_to_message.message_id} удалено администратором {message.from_user.id}")
-            
-        except Exception as e:
-            print(f"Ошибка при удалении сообщения: {e}")
-            bot.reply_to(message, "Не удалось удалить сообщение. Возможно, оно уже удалено или у бота нет прав.")
-    else:
-        bot.reply_to(message, "Чтобы удалить сообщение, ответьте на него командой /delete")
-
-# ID стикера для ответа (замените на нужный)
-DEATH_STICKER_ID = "CAACAgQAAxkBAAPRaDrz2F909wltvI6VIatp5uDdB74AArMRAAKm8XEeT17Q-RnKkMs2BA"  # Вставьте реальный file_id стикера
-#Функция для отправки стикера на слова сдохнуть
-def check_death_word_and_respond(message):
-    """Проверяет наличие слова 'сдохнуть' и отвечает стикером"""
-    
-    # Получаем слова из сообщения и лемматизируем их
-    words = message.text.lower().split()
-    lemmatized_words = lemmatize_words(words)
-    
-    # Лемматизируем искомое слово для сравнения
-    target_word = lemmatize_words(["сдохнуть", "умереть", "добить", "убить"])[0]
-    
-    print(f"Ищем слово: {target_word}")
-    print(f"В словах: {lemmatized_words}")
-    
-    # Проверяем, есть ли искомое слово в сообщении
-    if target_word in lemmatized_words:
-        print(f"Найдено слово '{target_word}' в сообщении!")
-        
-        try:
-            # Отправляем стикер в ответ
-            bot.send_sticker(
-                chat_id=message.chat.id,
-                sticker=DEATH_STICKER_ID,
-                reply_to_message_id=message.message_id
-            )
-            print("Стикер отправлен!")
-            
-        except Exception as e:
-            print(f"Ошибка при отправке стикера: {e}")
-            # Если стикер не отправился, можно отправить текст
-            bot.reply_to(message, "💀")
-
 # Обработчик всех сообщений
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
-    global is_paused, last_message_deleted, deleted_messages_log
+    global is_paused, last_message_deleted, deleted_messages_log, stats
     if is_paused:
         return
     else:
@@ -638,17 +410,25 @@ def handle_all_messages(message):
         words = message.text.split()
         if len(words) < 5:
             print(f"Сообщение от {message.from_user.username} содержит меньше 5 слов. Пропускаем.")
-            #Проверка, есть ли сдохнуть в сообщении
             check_death_word_and_respond(message)
             return
     
-        # Рассчитываем средний риск (включает проверку повторений)
+        # Рассчитываем средний риск
         average_risk = calculate_risk_with_tracking(message)
     
         # Проверяем, превышает ли риск порог
         if average_risk >= 2.5:
             print(f"Сообщение от {message.from_user.username} превысило порог риска.")
             try:
+                # Обновляем счетчик удаленных сообщений
+                chat_id = message.chat.id
+                if chat_id in stats:
+                    stats[chat_id]["deleted_messages_count"] += 1
+                    save_stats()  # Сохраняем статистику после обновления счетчика
+
+                # Получаем имя пользователя
+                user_name = get_user_name(message.from_user.id, message.chat.id)
+                
                 # Сохраняем информацию об удаляемом сообщении
                 deleted_messages_log[message.message_id] = {
                     "text": message.text,
@@ -656,21 +436,21 @@ def handle_all_messages(message):
                     "timestamp": datetime.now(),
                     "words": last_all_words.copy()
                 }
-                
+
                 # Удаляем сообщение
                 bot.delete_message(message.chat.id, message.message_id)
                 
-                # Отправляем сообщение с кнопкой жалобы
+                # Отправляем уведомление с кнопками
                 keyboard = create_complaint_keyboard(message.message_id)
                 msg = bot.send_message(
                     chat_id=message.chat.id, 
-                    text=f"Сообщение удалено за подозрение на рекламу.\n"
-                         f"Если это ошибка, нажмите кнопку ниже:", 
+                    text=notification_text,
                     reply_markup=keyboard,
+                    parse_mode="HTML",
                     disable_notification=True
                 )
 
-                # Удаляем сообщение с кнопкой через 30 секунд
+                # Удаляем сообщение с уведомлением через 30 секунд
                 delete_message_after_delay(message.chat.id, msg.message_id, bot, delay=30)
 
                 print(f"Сообщение {message.message_id} удалено.")
@@ -688,7 +468,6 @@ def handle_all_messages(message):
         else:
             print("Сообщение безопасно.")
             last_message_deleted = False
-            #Проверка, есть ли сдохнуть в сообщении
             check_death_word_and_respond(message)
 
 # Функция для очистки старых записей из лога (вызывать периодически)
