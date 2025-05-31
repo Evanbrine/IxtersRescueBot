@@ -680,7 +680,9 @@ def check_death_word_and_respond(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
-    global is_paused, last_message_deleted, deleted_messages_log, stats
+    global is_paused, last_message_deleted, deleted_messages_log
+    stats = get_stats()  # получаем текущее состояние статистики
+    
     if is_paused:
         return
     else:
@@ -705,10 +707,11 @@ def handle_all_messages(message):
             print(f"Сообщение от {message.from_user.username} превысило порог риска.")
             try:
                 # Обновляем счетчик удаленных сообщений
-                chat_id = message.chat.id
+                chat_id = str(message.chat.id)  # преобразуем в строку
                 if chat_id in stats:
                     stats[chat_id]["deleted_messages_count"] += 1
-                    save_stats()  # Сохраняем статистику после обновления счетчика
+                    set_stats(stats)  # обновляем статистику
+                    save_stats()  # сохраняем статистику
 
                 # Получаем имя пользователя
                 user_name = get_user_name(message.from_user.id, message.chat.id)
