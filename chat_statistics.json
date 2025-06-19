@@ -1,16 +1,16 @@
 {
     "-1002395509724": {
-        "message_count": 20,
-        "user_count": 4,
-        "deleted_messages_count": 0,
+        "message_count": 46,
+        "user_count": 6,
+        "deleted_messages_count": 5,
         "users": {
             "5113266064": {
-                "message_count": 10,
-                "last_message": "хы"
+                "message_count": 24,
+                "last_message": "Восстание машин против людей чек"
             },
             "1249961804": {
-                "message_count": 6,
-                "last_message": "Та самая отличница которую ебут в клубе в 3 ствола"
+                "message_count": 9,
+                "last_message": "люди хуй хуй хуй хуй хуй хуй хуй"
             },
             "5505339781": {
                 "message_count": 3,
@@ -19,6 +19,14 @@
             "5143890821": {
                 "message_count": 1,
                 "last_message": "Я проверял"
+            },
+            "6604377282": {
+                "message_count": 8,
+                "last_message": "Збс"
+            },
+            "725840467": {
+                "message_count": 1,
+                "last_message": "Люди хуй. Поняла, осознала. Спасибо"
             }
         }
     },
